@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: hex-backend
+
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hexa_db
+    username: alan
+    password: admin
+    driver-class-name: org.postgresql.Driver
+
+  # JPA / Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true 
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        
+# Configuración del servidor
+server:
+  port: 8080
