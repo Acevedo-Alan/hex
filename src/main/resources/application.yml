@@ -2,12 +2,20 @@ spring:
   application:
     name: hex-backend
 
+  # Protección contra Payload Gigantes (OOM Prevention)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+  # Database Configuration
   datasource:
     url: jdbc:postgresql://localhost:5432/hexa_db
     username: alan
     password: admin
     driver-class-name: org.postgresql.Driver
 
+  # JPA / Hibernate
   jpa:
     hibernate:
       ddl-auto: update
@@ -19,6 +27,11 @@ spring:
 
 server:
   port: 8080
+  
+  # Límite duro a nivel servidor para rechazar JSONs masivos
+  tomcat:
+    max-http-form-post-size: 5MB
+    max-swallow-size: 5MB
 
 cloudinary:
   cloud-name: vngrvoiz
