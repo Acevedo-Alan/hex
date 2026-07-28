@@ -6,11 +6,11 @@ import com.hex.hex_backend.domain.dto.RoomStateResponse;
 import com.hex.hex_backend.domain.entity.GridPhoto;
 import com.hex.hex_backend.domain.entity.Player;
 import com.hex.hex_backend.domain.entity.Room;
+import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.repository.PlayerRepository;
 import com.hex.hex_backend.repository.RoomRepository;
 import com.hex.hex_backend.service.RoomService;
 import com.hex.hex_backend.service.RoomSseService;
-import com.hex.hex_backend.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/rooms")
-@CrossOrigin(origins = "*") // Permite que el frontend de React se conecte
+@CrossOrigin(origins = "${app.frontend-url:http://localhost:5173}")
 @RequiredArgsConstructor
 public class RoomController {
 
@@ -53,6 +53,13 @@ public class RoomController {
     public SseEmitter streamUpdates(@PathVariable String roomCode, @PathVariable UUID playerId) {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(ResourceNotFoundException::new);
+
+        Player player = playerRepository.findById(playerId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        if (!roomCode.equals(player.getRoom().getRoomCode())) {
+            throw new ResourceNotFoundException();
+        }
 
         RoomStateResponse snapshot = RoomStateResponse.fromEntity(room);
         return sseService.subscribe(roomCode, playerId, snapshot);

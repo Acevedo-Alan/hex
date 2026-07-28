@@ -13,7 +13,8 @@ import com.hex.hex_backend.domain.entity.Room;
 @Repository
 public interface GridPhotoRepository extends JpaRepository<GridPhoto, UUID> {
     List<GridPhoto> findByRoomId(UUID roomId);
+    List<GridPhoto> findByRoomIn(List<Room> rooms);
     Optional<GridPhoto> findByPlayerIdAndSlotIndex(UUID playerId, Integer slotIndex);
 
-     void deleteByRoomIn(List<Room> rooms);
+    void deleteByRoomIn(List<Room> rooms);
 }

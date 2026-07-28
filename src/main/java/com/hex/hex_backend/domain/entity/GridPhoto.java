@@ -46,6 +46,9 @@ public class GridPhoto {
     @Column(name = "cloudinary_url")
     private String cloudinaryUrl;
 
+    @Column(name = "cloudinary_public_id")
+    private String cloudinaryPublicId;
+
     @Column(precision = 5, scale = 2)
     private BigDecimal score;
 

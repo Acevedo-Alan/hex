@@ -36,8 +36,11 @@ public class RoomSseService {
     }
 
     public void broadcastToRoom(String roomCode, String eventName, Object data) {
-        Map<UUID, SseEmitter> emitters = roomEmitters.getOrDefault(roomCode, new ConcurrentHashMap<>());
-        
+        Map<UUID, SseEmitter> emitters = roomEmitters.get(roomCode);
+        if (emitters == null || emitters.isEmpty()) {
+            return;
+        }
+
         emitters.forEach((playerId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event().name(eventName).data(data));

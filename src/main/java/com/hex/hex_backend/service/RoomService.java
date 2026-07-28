@@ -1,5 +1,7 @@
 package com.hex.hex_backend.service;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import com.hex.hex_backend.domain.entity.GridPhoto;
 import com.hex.hex_backend.domain.entity.Player;
 import com.hex.hex_backend.domain.entity.Room;
@@ -12,6 +14,7 @@ import com.hex.hex_backend.repository.GridPhotoRepository;
 import com.hex.hex_backend.repository.PlayerRepository;
 import com.hex.hex_backend.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -24,8 +27,10 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoomService {
@@ -35,6 +40,7 @@ public class RoomService {
     private final GridPhotoRepository gridPhotoRepository;
     private final PinGeneratorService pinGenerator;
     private final ColorMathService colorMath;
+    private final Cloudinary cloudinary;
 
     @Transactional
     public Room createRoom() {
@@ -96,8 +102,16 @@ public class RoomService {
         photo.setRoom(room);
         photo.setSlotIndex(slotIndex);
         photo.setScore(officialScore);
-        
-        // TODO: En Fase 3, subiremos el base64 a Cloudinary aquí.
+
+        try {
+            String cleanBase64 = base64Payload.contains(",") ? base64Payload.split(",")[1] : base64Payload;
+            byte[] imageBytes = Base64.getDecoder().decode(cleanBase64);
+            Map uploadResult = cloudinary.uploader().upload(imageBytes, ObjectUtils.emptyMap());
+            photo.setCloudinaryUrl((String) uploadResult.get("secure_url"));
+            photo.setCloudinaryPublicId((String) uploadResult.get("public_id"));
+        } catch (Exception e) {
+            log.warn("No se pudo subir la imagen a Cloudinary para el jugador {}", playerId, e);
+        }
 
         return gridPhotoRepository.save(photo);
     }
