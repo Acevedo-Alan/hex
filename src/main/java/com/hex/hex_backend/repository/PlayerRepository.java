@@ -1,6 +1,7 @@
 package com.hex.hex_backend.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,5 +14,5 @@ import com.hex.hex_backend.domain.entity.Room;
 public interface PlayerRepository extends JpaRepository<Player, UUID> {
     List<Player> findByRoomId(UUID roomId);
     void deleteByRoomIn(List<Room> rooms);
-    
+    Optional<Player> findFirstByRoomIdAndIdNotOrderByCreatedAtAsc(UUID roomId, UUID excludedPlayerId);
 }

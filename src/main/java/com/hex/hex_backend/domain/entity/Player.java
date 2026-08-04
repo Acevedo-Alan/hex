@@ -30,6 +30,10 @@ public class Player {
 
     @Column(nullable = false, length = 50)
     private String nickname;
+    @Column(nullable = false)
+    private boolean ready = false;
+    @Column(nullable = false)
+    private boolean connected = true;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id", nullable = false)

@@ -7,9 +7,11 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.hex.hex_backend.exception.InvalidRoomStateException;
+import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
 import com.hex.hex_backend.exception.RoomCollisionException;
+import com.hex.hex_backend.exception.UnauthorizedException;
 
 import java.util.Map;
 
@@ -33,6 +35,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleInvalidState(InvalidRoomStateException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", "Acción no permitida en el estado actual de la sala."));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<?> handleRateLimit(RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<?> handleUnauthorized(UnauthorizedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)

@@ -39,3 +39,7 @@ src/main/java/com/hex/hex_backend/oracleJdk-26/
 application.yml
 src/main/resources/application.yml
 !application.yml.example
+
+#env
+.env
+application-local.yml

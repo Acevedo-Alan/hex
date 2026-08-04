@@ -1,5 +1,6 @@
 package com.hex.hex_backend.service;
 
+import com.hex.hex_backend.domain.dto.RoomStateResponse;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
 import com.hex.hex_backend.domain.entity.GridPhoto;
@@ -20,13 +21,14 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,7 +43,7 @@ public class RoomService {
     private final PinGeneratorService pinGenerator;
     private final ColorMathService colorMath;
     private final Cloudinary cloudinary;
-
+    private final RoomSseService sseService;
     @Transactional
     public Room createRoom() {
         int maxRetries = 3;
@@ -60,13 +62,23 @@ public class RoomService {
         throw new RoomCollisionException();
     }
 
-    @Transactional
-    public Room startGame(String roomCode) {
+@Transactional
+    public Room startGame(String roomCode, UUID requestingPlayerId) {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(ResourceNotFoundException::new);
         
         if (room.getStatus() != RoomStatus.WAITING) {
             throw new InvalidRoomStateException();
+        }
+
+        if (!requestingPlayerId.equals(room.getHostPlayerId())) {
+            throw new IllegalStateException("Solo el dueño de la sala puede iniciar la partida.");
+        }
+
+        java.util.List<Player> players = playerRepository.findByRoomId(room.getId());
+        boolean allReady = !players.isEmpty() && players.stream().allMatch(Player::isReady);
+        if (!allReady) {
+            throw new IllegalStateException("Todos los jugadores deben estar listos para iniciar.");
         }
 
         try {
@@ -79,7 +91,84 @@ public class RoomService {
             throw new RoomAlreadyStartedException();
         }
     }
+@org.springframework.scheduling.annotation.Scheduled(fixedRate = 5000)
+    @Transactional
+    public void completeExpiredRooms() {
+        List<Room> activeRooms = roomRepository.findByStatus(RoomStatus.ACTIVE);
 
+        for (Room room : activeRooms) {
+            if (room.getEndsAt() != null && LocalDateTime.now().isAfter(room.getEndsAt())) {
+                room.setStatus(RoomStatus.COMPLETED);
+                roomRepository.save(room);
+
+                RoomStateResponse response = RoomStateResponse.fromEntity(
+                        room,
+                        playerRepository.findByRoomId(room.getId()),
+                        gridPhotoRepository.findByRoomId(room.getId()));
+
+                sseService.broadcastToRoom(room.getRoomCode(), "GAME_STATE", response);
+            }
+        }
+    }
+    @Transactional
+    public RoomStateResponse handleDisconnect(String roomCode, UUID playerId) {
+        Room room = roomRepository.findByRoomCode(roomCode).orElse(null);
+        if (room == null) return null;
+        Player player = playerRepository.findById(playerId).orElse(null);
+        if (player == null) return null;
+
+        if (room.getStatus() == RoomStatus.WAITING) {
+            boolean wasHost = playerId.equals(room.getHostPlayerId());
+            playerRepository.delete(player);
+
+            if (wasHost) {
+                UUID newHostId = playerRepository
+                        .findFirstByRoomIdAndIdNotOrderByCreatedAtAsc(room.getId(), playerId)
+                        .map(Player::getId)
+                        .orElse(null);
+                room.setHostPlayerId(newHostId);
+                roomRepository.save(room);
+            }
+        } else {
+            player.setConnected(false);
+            playerRepository.save(player);
+        }
+
+        return RoomStateResponse.fromEntity(
+                room,
+                playerRepository.findByRoomId(room.getId()),
+                gridPhotoRepository.findByRoomId(room.getId()));
+    }
+
+    /**
+     * Se llama cada vez que se abre (o reabre) el stream SSE de un jugador.
+     * Si venía marcado como desconectado (se cortó a mitad de partida y
+     * volvió), lo repone. wasReconnect indica si hubo que tocar algo, para
+     * que el controller decida si vale la pena avisarle al resto de la sala.
+     */
+    @Transactional
+    public ReconnectResult handleReconnect(String roomCode, UUID playerId) {
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(ResourceNotFoundException::new);
+        Player player = playerRepository.findById(playerId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        boolean wasReconnect = !player.isConnected();
+        if (wasReconnect) {
+            player.setConnected(true);
+            playerRepository.save(player);
+        }
+
+        RoomStateResponse response = RoomStateResponse.fromEntity(
+                room,
+                playerRepository.findByRoomId(room.getId()),
+                gridPhotoRepository.findByRoomId(room.getId()));
+
+        return new ReconnectResult(response, wasReconnect);
+    }
+
+    public record ReconnectResult(RoomStateResponse state, boolean wasReconnect) {
+    }
     @Transactional
     public GridPhoto submitPhoto(String roomCode, UUID playerId, int slotIndex, String base64Payload) {
         Room room = roomRepository.findByRoomCode(roomCode)
@@ -113,8 +202,28 @@ public class RoomService {
             log.warn("No se pudo subir la imagen a Cloudinary para el jugador {}", playerId, e);
         }
 
-        return gridPhotoRepository.save(photo);
+        GridPhoto savedPhoto = gridPhotoRepository.save(photo);
+        checkForEarlyCompletion(room);
+        return savedPhoto;
     }
+
+    private void checkForEarlyCompletion(Room room) {
+        if (room.getStatus() != RoomStatus.ACTIVE) return;
+
+        List<Player> players = playerRepository.findByRoomId(room.getId());
+        List<GridPhoto> photos = gridPhotoRepository.findByRoomId(room.getId());
+
+        boolean everyoneFinished = !players.isEmpty() && players.stream()
+                .allMatch(p -> photos.stream()
+                        .filter(ph -> ph.getPlayer().getId().equals(p.getId()))
+                        .count() >= 9);
+
+        if (everyoneFinished) {
+            room.setStatus(RoomStatus.COMPLETED);
+            roomRepository.save(room);
+        }
+    }
+    
 
     private int[] extractAverageColor(String base64Payload) {
         try {

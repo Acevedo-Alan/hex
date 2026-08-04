@@ -40,6 +40,9 @@ public class Room {
     @Column(name = "room_code", nullable = false, length = 5)
     private String roomCode;
 
+    @Column(name = "host_player_id")
+    private UUID hostPlayerId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RoomStatus status = RoomStatus.WAITING;
