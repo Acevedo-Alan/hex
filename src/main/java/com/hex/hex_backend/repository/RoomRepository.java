@@ -15,4 +15,5 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
     Optional<Room> findByRoomCode(String roomCode);
     List<Room> findByCreatedAtBefore(LocalDateTime threshold);
     List<Room> findByStatus(com.hex.hex_backend.domain.enums.RoomStatus status);
+    long countByStatusIn(List<com.hex.hex_backend.domain.enums.RoomStatus> statuses);
 }

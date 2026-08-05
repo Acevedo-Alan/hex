@@ -83,6 +83,14 @@ public class RoomController {
         }
     }
 
+    @GetMapping("/stats")
+public ResponseEntity<java.util.Map<String, Long>> getStats() {
+    // Salas que todavía tienen gente jugando o esperando — no cuenta
+    // COMPLETED, que igual desaparecen a la hora vía RoomCleanupService.
+    long activeRooms = roomRepository.countByStatusIn(List.of(RoomStatus.WAITING, RoomStatus.ACTIVE));
+    return ResponseEntity.ok(java.util.Map.of("activeRooms", activeRooms));
+}
+
     @PostMapping
     public ResponseEntity<RoomStateResponse> createRoom(HttpServletRequest httpRequest) {
         if (!rateLimiterService.allow("create:" + clientKey(httpRequest), 10, 10 * 60 * 1000L)) {
