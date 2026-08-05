@@ -133,13 +133,13 @@ public class RoomController {
         // nombre, o arrancar la partida si es host. Secure porque todo el
         // proyecto corre sobre HTTPS (mkcert en dev); sin HTTPS el navegador
         // descarta la cookie en silencio.
-        ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, sessionTokenService.issue(player.getId()))
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
-                .path("/api")
-                .maxAge(java.time.Duration.ofHours(4))
-                .build();
+ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, sessionTokenService.issue(player.getId()))
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("None")
+        .path("/api")
+        .maxAge(java.time.Duration.ofHours(4))
+        .build();
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
