@@ -157,16 +157,30 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
     @GetMapping(path = "/{roomCode}/stream/{playerId}", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamUpdates(@PathVariable String roomCode, @PathVariable UUID playerId,
             HttpServletRequest httpRequest) {
-        requireOwnership(httpRequest, playerId);
+        // OJO: este método produce text/event-stream, y EventSource manda
+        // Accept: text/event-stream puro (sin comodín ningún tipo JSON). Si
+        // dejamos que una excepción se propague hasta el GlobalExceptionHandler
+        // normal, Spring intenta negociar un body JSON contra un Accept que
+        // solo permite event-stream, no encuentra conversor compatible, y el
+        // resultado es un 500 con el body vacío en vez del 401/404 que
+        // corresponde — el cliente nunca se entera de qué pasó en realidad.
+        // Por eso acá abajo capturamos todo lo que antes tiraba
+        // orElseThrow/requireOwnership y lo mandamos como un evento SSE de
+        // error real, dentro del mismo content-type que el cliente pidió.
+        try {
+            requireOwnership(httpRequest, playerId);
 
-        Room room = roomRepository.findByRoomCode(roomCode)
-                .orElseThrow(ResourceNotFoundException::new);
+            roomRepository.findByRoomCode(roomCode)
+                    .orElseThrow(ResourceNotFoundException::new);
 
-        Player player = playerRepository.findById(playerId)
-                .orElseThrow(ResourceNotFoundException::new);
+            Player player = playerRepository.findById(playerId)
+                    .orElseThrow(ResourceNotFoundException::new);
 
-        if (!roomCode.equals(player.getRoom().getRoomCode())) {
-            throw new ResourceNotFoundException();
+            if (!roomCode.equals(player.getRoom().getRoomCode())) {
+                throw new ResourceNotFoundException();
+            }
+        } catch (UnauthorizedException | ResourceNotFoundException ex) {
+            return sseService.subscribeWithImmediateError(ex);
         }
 
         RoomService.ReconnectResult reconnectResult = roomService.handleReconnect(roomCode, playerId);

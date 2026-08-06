@@ -35,6 +35,26 @@ public class RoomSseService {
         return emitter;
     }
 
+    // Para cuando la sesión/sala/jugador no son válidos: en vez de dejar que
+    // el controller tire una excepción normal (que Spring no puede resolver
+    // en JSON contra un cliente que solo acepta text/event-stream — termina
+    // en 500 con body vacío), mandamos un emitter que abre, manda un evento
+    // "FATAL_ERROR" con el motivo, y se cierra. El cliente lo recibe como un
+    // evento SSE real y puede reaccionar al toque, sin esperar 5 reintentos
+    // de red contra un endpoint que siempre va a fallar igual.
+    public SseEmitter subscribeWithImmediateError(RuntimeException reason) {
+        SseEmitter emitter = new SseEmitter(5000L);
+        try {
+            emitter.send(SseEmitter.event().name("FATAL_ERROR").data(Map.of(
+                    "error", reason.getClass().getSimpleName(),
+                    "message", reason.getMessage() != null ? reason.getMessage() : "")));
+            emitter.complete();
+        } catch (IOException e) {
+            emitter.completeWithError(e);
+        }
+        return emitter;
+    }
+
     public void broadcastToRoom(String roomCode, String eventName, Object data) {
         Map<UUID, SseEmitter> emitters = roomEmitters.get(roomCode);
         if (emitters == null || emitters.isEmpty()) {
