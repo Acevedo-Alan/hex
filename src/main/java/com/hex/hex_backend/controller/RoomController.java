@@ -215,6 +215,24 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{roomCode}/restart")
+    public ResponseEntity<RoomStateResponse> restartRoom(@PathVariable String roomCode,
+            @RequestParam UUID playerId, HttpServletRequest httpRequest) {
+        requireOwnership(httpRequest, playerId);
+
+        Room room = roomService.restartRoom(roomCode, playerId);
+        RoomStateResponse response = RoomStateResponse.fromEntity(
+                room,
+                playerRepository.findByRoomId(room.getId()),
+                gridPhotoRepository.findByRoomId(room.getId()));
+
+        // GAME_STATE (no un evento nuevo): el frontend ya sabe reaccionar a
+        // este evento y a un status WAITING — reusarlo evita tener que
+        // enseñarle un tipo de evento más a useSSE para esto.
+        sseService.broadcastToRoom(roomCode, "GAME_STATE", response);
+        return ResponseEntity.ok(response);
+    }
+
     @PatchMapping("/{roomCode}/players/{playerId}/ready")
     public ResponseEntity<RoomStateResponse> setReady(@PathVariable String roomCode,
             @PathVariable UUID playerId, @RequestBody com.hex.hex_backend.domain.dto.ReadyRequest request,

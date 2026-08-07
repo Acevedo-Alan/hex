@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.hex.hex_backend.exception.InvalidRoomStateException;
+import com.hex.hex_backend.exception.PhotoUploadFailedException;
 import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
@@ -40,6 +41,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<?> handleRateLimit(RateLimitExceededException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(PhotoUploadFailedException.class)
+    public ResponseEntity<?> handlePhotoUploadFailed(PhotoUploadFailedException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(Map.of("error", ex.getMessage()));
     }
 

@@ -8,6 +8,7 @@ import com.hex.hex_backend.domain.entity.Player;
 import com.hex.hex_backend.domain.entity.Room;
 import com.hex.hex_backend.domain.enums.RoomStatus;
 import com.hex.hex_backend.exception.InvalidRoomStateException;
+import com.hex.hex_backend.exception.PhotoUploadFailedException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
 import com.hex.hex_backend.exception.RoomCollisionException;
@@ -91,6 +92,62 @@ public class RoomService {
             throw new RoomAlreadyStartedException();
         }
     }
+    @Transactional
+    public Room restartRoom(String roomCode, UUID requestingPlayerId) {
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        if (room.getStatus() != RoomStatus.COMPLETED) {
+            throw new InvalidRoomStateException();
+        }
+
+        if (!requestingPlayerId.equals(room.getHostPlayerId())) {
+            throw new IllegalStateException("Solo el dueño de la sala puede iniciar la revancha.");
+        }
+
+        List<Player> players = playerRepository.findByRoomId(room.getId());
+
+        // Mismo criterio que handleDisconnect en una sala WAITING: quien
+        // terminó desconectado se saca de la sala en vez de arrastrarlo a la
+        // revancha — no podría marcarse "ready" y dejaría el lobby trabado
+        // para siempre. Si el host estaba entre ellos, le pasamos la posta
+        // al jugador conectado más antiguo (en la práctica no debería pasar,
+        // porque quien llama a este método ya es el host y por lo tanto
+        // está conectado).
+        for (Player p : players) {
+            if (!p.isConnected()) {
+                boolean wasHost = p.getId().equals(room.getHostPlayerId());
+                playerRepository.delete(p);
+                if (wasHost) {
+                    UUID newHostId = playerRepository
+                            .findFirstByRoomIdAndIdNotOrderByCreatedAtAsc(room.getId(), p.getId())
+                            .map(Player::getId)
+                            .orElse(null);
+                    room.setHostPlayerId(newHostId);
+                }
+            }
+        }
+
+        List<Player> remaining = playerRepository.findByRoomId(room.getId());
+        if (remaining.isEmpty() || room.getHostPlayerId() == null) {
+            throw new InvalidRoomStateException();
+        }
+
+        remaining.forEach(p -> p.setReady(false));
+        playerRepository.saveAll(remaining);
+
+        // Fotos de la ronda anterior — la revancha arranca con grilla
+        // vacía. El totalScore no vive en Player, se recalcula solo al
+        // sumar GridPhoto (ver RoomStateResponse.fromEntity), así que no
+        // hace falta tocar nada de scores acá.
+        gridPhotoRepository.deleteAll(gridPhotoRepository.findByRoomId(room.getId()));
+
+        room.setStatus(RoomStatus.WAITING);
+        room.setTargetHex(null);
+        room.setEndsAt(null);
+        return roomRepository.save(room);
+    }
+
 @org.springframework.scheduling.annotation.Scheduled(fixedRate = 5000)
     @Transactional
     public void completeExpiredRooms() {
@@ -199,7 +256,17 @@ public class RoomService {
             photo.setCloudinaryUrl((String) uploadResult.get("secure_url"));
             photo.setCloudinaryPublicId((String) uploadResult.get("public_id"));
         } catch (Exception e) {
-            log.warn("No se pudo subir la imagen a Cloudinary para el jugador {}", playerId, e);
+            // Antes esto solo logueaba un warning y seguía de largo: la foto
+            // quedaba guardada en la base con cloudinaryUrl null, el
+            // endpoint devolvía 200 igual, y el frontend avanzaba nextSlot
+            // como si el slot estuviera completo. El jugador quedaba con un
+            // casillero roto sin foto y sin forma de reintentarlo, porque
+            // nextSlot nunca retrocede. Ahora se propaga la excepción: el
+            // @Transactional hace rollback (no se guarda nada a medias) y el
+            // frontend recibe un error real, que ScannerView ya sabe manejar
+            // (toast "ERROR AL ENVIAR" + no avanza de slot).
+            log.error("No se pudo subir la imagen a Cloudinary para el jugador {} (slot {})", playerId, slotIndex, e);
+            throw new PhotoUploadFailedException();
         }
 
         GridPhoto savedPhoto = gridPhotoRepository.save(photo);
