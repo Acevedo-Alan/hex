@@ -29,9 +29,9 @@ server:
     max-swallow-size: 5MB
 
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+  cloud-name: vngrvoiz
+  api-key: 749569668139118
+  api-secret: gh92FW5Ic5cLBG5OoB58caWBaKg
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5174}
   # Firma los tokens de sesión (cookie HttpOnly por jugador). El default es
