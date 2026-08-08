@@ -1,5 +1,6 @@
 package com.hex.hex_backend.domain.entity;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -51,7 +52,13 @@ public class Room {
     private String targetHex;
 
     @Column(name = "ends_at")
-    private LocalDateTime endsAt;
+    // Instant, no LocalDateTime: LocalDateTime no lleva zona horaria, y al
+    // serializarse a JSON sin ella el navegador interpreta la fecha como
+    // hora LOCAL del usuario en vez de UTC — con el server en UTC y un
+    // usuario en Argentina (UTC-3), eso desfasaba la cuenta regresiva del
+    // Scanner varias horas (el bug del "108725 restantes"). Instant
+    // siempre serializa con sufijo Z, sin ambigüedad posible.
+    private Instant endsAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

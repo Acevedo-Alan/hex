@@ -7,7 +7,7 @@ import com.hex.hex_backend.domain.enums.RoomStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,7 +18,7 @@ public class RoomStateResponse {
     private String roomCode;
     private RoomStatus status;
     private String targetHex;
-    private LocalDateTime endsAt;
+    private Instant endsAt;
     private List<PlayerDto> players;
     private List<PhotoDto> photos;
     private UUID hostPlayerId;
