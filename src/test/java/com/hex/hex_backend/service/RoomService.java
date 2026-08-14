@@ -259,6 +259,7 @@ public class RoomService {
         photo.setRoom(room);
         photo.setSlotIndex(slotIndex);
         photo.setScore(officialScore);
+        photo.setCapturedHex(colorMath.rgbToHex(photoRgb));
 
         try {
             String cleanBase64 = base64Payload.contains(",") ? base64Payload.split(",")[1] : base64Payload;
