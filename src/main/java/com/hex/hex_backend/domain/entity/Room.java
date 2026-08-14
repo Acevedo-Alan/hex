@@ -2,6 +2,8 @@ package com.hex.hex_backend.domain.entity;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
@@ -48,8 +50,23 @@ public class Room {
     @Column(nullable = false)
     private RoomStatus status = RoomStatus.WAITING;
 
-    @Column(name = "target_hex", length = 7)
-    private String targetHex;
+    // Un target por casillero, no uno solo para toda la ronda — si no, el
+    // jugador encuentra un objeto que matchea bien y saca la misma foto 9
+    // veces. La columna guarda un CSV plano ("#FF0000,#00FF00,...") en vez
+    // de una @ElementCollection con tabla aparte — con 9 valores fijos por
+    // ronda no vale la pena la tabla hija extra, y el CSV es una columna
+    // menos para migrar en un ddl-auto:update.
+    @Column(name = "target_hexes", length = 80)
+    private String targetHexesRaw;
+
+    public List<String> getTargetHexes() {
+        if (targetHexesRaw == null || targetHexesRaw.isBlank()) return List.of();
+        return Arrays.asList(targetHexesRaw.split(","));
+    }
+
+    public void setTargetHexes(List<String> hexes) {
+        this.targetHexesRaw = (hexes == null || hexes.isEmpty()) ? null : String.join(",", hexes);
+    }
 
     @Column(name = "ends_at")
     // Instant, no LocalDateTime: LocalDateTime no lleva zona horaria, y al

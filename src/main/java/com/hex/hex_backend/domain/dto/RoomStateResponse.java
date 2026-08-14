@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 public class RoomStateResponse {
     private String roomCode;
     private RoomStatus status;
-    private String targetHex;
+    private List<String> targetHexes;
     private Instant endsAt;
     private List<PlayerDto> players;
     private List<PhotoDto> photos;
@@ -27,7 +27,7 @@ public class RoomStateResponse {
         RoomStateResponse response = new RoomStateResponse();
         response.setRoomCode(room.getRoomCode());
         response.setStatus(room.getStatus());
-        response.setTargetHex(room.getTargetHex());
+        response.setTargetHexes(room.getTargetHexes());
         response.setEndsAt(room.getEndsAt());
 
         List<PlayerDto> playerDtos = players.stream().map(PlayerDto::fromEntity).toList();

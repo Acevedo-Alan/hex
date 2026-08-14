@@ -84,8 +84,15 @@ public class RoomService {
 
         try {
             room.setStatus(RoomStatus.ACTIVE);
-            room.setTargetHex(generateRandomHex());
-            room.setEndsAt(Instant.now().plusSeconds(90)); 
+            // 9 targets, uno por casillero — antes era un solo color para
+            // toda la ronda, y bastaba con encontrar un objeto que matcheara
+            // bien y sacarle la misma foto 9 veces. Con un color distinto
+            // por foto, cada casillero obliga a salir a buscar de nuevo.
+            room.setTargetHexes(generateTargetPalette(9));
+            // 150s en vez de 90: encontrar un objeto nuevo para cada uno de
+            // los 9 colores es bastante más lento que reencuadrar el mismo
+            // objeto 9 veces — el tiempo total tiene que acompañar.
+            room.setEndsAt(Instant.now().plusSeconds(150));
             
             return roomRepository.save(room);
         } catch (ObjectOptimisticLockingFailureException e) {
@@ -143,7 +150,7 @@ public class RoomService {
         gridPhotoRepository.deleteAll(gridPhotoRepository.findByRoomId(room.getId()));
 
         room.setStatus(RoomStatus.WAITING);
-        room.setTargetHex(null);
+        room.setTargetHexes(null);
         room.setEndsAt(null);
         return roomRepository.save(room);
     }
@@ -238,7 +245,11 @@ public class RoomService {
         }
 
         int[] photoRgb = extractAverageColor(base64Payload);
-        int[] targetRgb = colorMath.hexToRgb(room.getTargetHex());
+        List<String> targetHexes = room.getTargetHexes();
+        if (slotIndex < 0 || slotIndex >= targetHexes.size()) {
+            throw new InvalidRoomStateException();
+        }
+        int[] targetRgb = colorMath.hexToRgb(targetHexes.get(slotIndex));
         BigDecimal officialScore = colorMath.calculateMatchScore(targetRgb, photoRgb);
 
         GridPhoto photo = gridPhotoRepository.findByPlayerIdAndSlotIndex(playerId, slotIndex)
@@ -332,11 +343,40 @@ public class RoomService {
         }
     }
 
-    private String generateRandomHex() {
+    // Genera `count` colores repartidos parejo en el círculo cromático (cada
+    // 360/count grados) a partir de un punto de arranque al azar, en vez de
+    // `count` tiradas random independientes — random puro puede darte 3
+    // tonos de azul casi iguales y ningún verde en toda la ronda. Satura-
+    // ción y luminosidad quedan acotadas (55-90% / 40-65%) para que el
+    // color siga siendo "encontrable": nada casi blanco, casi negro, o tan
+    // desaturado que se vea gris.
+    private List<String> generateTargetPalette(int count) {
         java.security.SecureRandom random = new java.security.SecureRandom();
-        int r = random.nextInt(256);
-        int g = random.nextInt(256);
-        int b = random.nextInt(256);
-        return String.format("#%02X%02X%02X", r, g, b);
+        double startHue = random.nextDouble() * 360;
+        List<String> palette = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            double hue = (startHue + i * (360.0 / count)) % 360;
+            double saturation = 0.55 + random.nextDouble() * 0.35;
+            double lightness = 0.40 + random.nextDouble() * 0.25;
+            palette.add(hslToHex(hue, saturation, lightness));
+        }
+        return palette;
+    }
+
+    private String hslToHex(double h, double s, double l) {
+        double c = (1 - Math.abs(2 * l - 1)) * s;
+        double x = c * (1 - Math.abs((h / 60.0) % 2 - 1));
+        double m = l - c / 2;
+        double r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        int ri = (int) Math.round((r + m) * 255);
+        int gi = (int) Math.round((g + m) * 255);
+        int bi = (int) Math.round((b + m) * 255);
+        return String.format("#%02X%02X%02X", ri, gi, bi);
     }
 }
