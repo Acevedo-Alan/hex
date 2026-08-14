@@ -52,6 +52,13 @@ public class GridPhoto {
     @Column(precision = 5, scale = 2)
     private BigDecimal score;
 
+    // Color promedio real que capturó la foto (#RRGGBB) — antes se
+    // calculaba (extractAverageColor) solo para el score y se descartaba.
+    // Se persiste para poder recolorizar el mosaico de obra de arte del
+    // podio con el color de verdad que sacó el jugador, no solo el score.
+    @Column(name = "captured_hex", length = 7)
+    private String capturedHex;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     @Setter(AccessLevel.NONE)

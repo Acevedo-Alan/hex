@@ -15,6 +15,7 @@ public class PhotoDto {
     private String cloudinaryUrl;
     private String cloudinaryPublicId;
     private BigDecimal score;
+    private String capturedHex;
     private LocalDateTime createdAt;
 
     public static PhotoDto fromEntity(GridPhoto photo) {
@@ -25,6 +26,7 @@ public class PhotoDto {
         dto.setCloudinaryUrl(photo.getCloudinaryUrl());
         dto.setCloudinaryPublicId(photo.getCloudinaryPublicId());
         dto.setScore(photo.getScore());
+        dto.setCapturedHex(photo.getCapturedHex());
         dto.setCreatedAt(photo.getCreatedAt());
         return dto;
     }

@@ -45,4 +45,11 @@ public class ColorMathService {
             Integer.valueOf(cleanHex.substring(4, 6), 16)
         };
     }
+
+    // La inversa de hexToRgb — hace falta para persistir el color promedio
+    // real que capturó cada foto (ver GridPhoto.capturedHex), no solo
+    // usarlo de paso para calcular el score y descartarlo.
+    public String rgbToHex(int[] rgb) {
+        return String.format("#%02X%02X%02X", rgb[0], rgb[1], rgb[2]);
+    }
 }
