@@ -12,6 +12,7 @@ import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
 import com.hex.hex_backend.exception.RoomCollisionException;
+import com.hex.hex_backend.exception.RoomFullException;
 import com.hex.hex_backend.exception.UnauthorizedException;
 
 import java.util.Map;
@@ -30,6 +31,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleRoomAlreadyStarted(RoomAlreadyStartedException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "La partida ya ha comenzado."));
+    }
+
+    @ExceptionHandler(RoomFullException.class)
+    public ResponseEntity<?> handleRoomFull(RoomFullException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "La sala ya está llena (máximo 8 jugadores)."));
     }
 
     @ExceptionHandler(InvalidRoomStateException.class)

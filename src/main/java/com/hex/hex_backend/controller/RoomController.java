@@ -12,6 +12,7 @@ import com.hex.hex_backend.domain.enums.RoomStatus;
 import com.hex.hex_backend.exception.InvalidRoomStateException;
 import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
+import com.hex.hex_backend.exception.RoomFullException;
 import com.hex.hex_backend.exception.UnauthorizedException;
 import com.hex.hex_backend.repository.GridPhotoRepository;
 import com.hex.hex_backend.repository.PlayerRepository;
@@ -37,6 +38,13 @@ import java.util.UUID;
 //@CrossOrigin(origins = "${app.frontend-url:http://localhost:5173}")
 @RequiredArgsConstructor
 public class RoomController {
+
+    // 8 jugadores por sala — 9 casilleros por persona ya generan bastante
+    // tráfico de SSE/fotos; sin tope, joinRoom no tenía ningún freno (a
+    // diferencia de createRoom, que sí tiene rate limiter) y una sala
+    // gigante rompe el layout de todas las pantallas que asumen un grupo
+    // chico (waiting room, podio, contact sheet).
+    private static final int MAX_PLAYERS = 8;
 
     private final RoomService roomService;
     private final RoomSseService sseService;
@@ -105,12 +113,21 @@ public ResponseEntity<java.util.Map<String, Long>> getStats() {
     }
 
     @PostMapping("/{roomCode}/join")
-    public ResponseEntity<Player> joinRoom(@PathVariable String roomCode, @RequestBody JoinRoomRequest request) {
+    public ResponseEntity<Player> joinRoom(@PathVariable String roomCode, @RequestBody JoinRoomRequest request,
+            HttpServletRequest httpRequest) {
+        if (!rateLimiterService.allow("join:" + clientKey(httpRequest), 30, 10 * 60 * 1000L)) {
+            throw new RateLimitExceededException();
+        }
+
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(ResourceNotFoundException::new);
 
         if (room.getStatus() != RoomStatus.WAITING) {
             throw new InvalidRoomStateException();
+        }
+
+        if (playerRepository.findByRoomId(room.getId()).size() >= MAX_PLAYERS) {
+            throw new RoomFullException();
         }
 
         String nickname = request.getNickname() == null ? "" : request.getNickname().trim();
