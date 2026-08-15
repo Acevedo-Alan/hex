@@ -217,6 +217,35 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
         });
     }
 
+    /**
+     * Modo espectador: alguien entra a ver una sala sin jugar (útil para
+     * gente que se sumó tarde y ya está ACTIVE, o para mirar el podio de
+     * afuera). No hay Player ni cookie de sesión detrás — el UUID generado
+     * acá es solo la clave para el mapa de emitters de RoomSseService, se
+     * descarta apenas se cierra la conexión. Por eso mismo no necesita
+     * requireOwnership: no hay ninguna acción de escritura que proteger.
+     */
+@GetMapping(path = "/{roomCode}/spectate", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter spectate(@PathVariable String roomCode, HttpServletRequest httpRequest) {
+    try {
+        if (!rateLimiterService.allow("spectate:" + clientKey(httpRequest), 20, 10 * 60 * 1000L)) {
+            throw new RateLimitExceededException();
+        }
+
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        RoomStateResponse snapshot = RoomStateResponse.fromEntity(
+                room,
+                playerRepository.findByRoomId(room.getId()),
+                gridPhotoRepository.findByRoomId(room.getId()));
+
+        return sseService.subscribe(roomCode, UUID.randomUUID(), snapshot, () -> {});
+    } catch (ResourceNotFoundException | RateLimitExceededException ex) {
+        return sseService.subscribeWithImmediateError(ex);
+    }
+}
+
     @PostMapping("/{roomCode}/start")
     public ResponseEntity<RoomStateResponse> startGame(@PathVariable String roomCode,
             @RequestParam UUID playerId, HttpServletRequest httpRequest) {
