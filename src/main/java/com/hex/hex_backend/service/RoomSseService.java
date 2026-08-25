@@ -26,6 +26,12 @@ public class RoomSseService {
         emitter.onError((e) -> { removeEmitter(roomCode, playerId); onDisconnect.run(); });
 
         try {
+            // Bug conocido de Safari/iOS: WebKit bufferea agresivamente la
+            // respuesta y no "abre" el EventSource del lado del cliente hasta
+            // que llega contenido — sin este evento chico primero, el join
+            // se registra bien en el backend pero la UI se queda pegada en
+            // el Lobby esperando un GAME_STATE que WebKit todavía no entregó.
+            emitter.send(SseEmitter.event().name("init").data("connected"));
             // SNAPSHOT INICIAL: Mandamos el estado actual al conectarse (Soporta F5/Refrescos)
             emitter.send(SseEmitter.event().name("GAME_STATE").data(initialSnapshot));
         } catch (IOException e) {

@@ -171,8 +171,21 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
                 .body(player);
     }
 
+    // Safari/WebKit bufferea agresivamente el body de una respuesta SSE si no
+    // ve estos headers explícitos (Cache-Control/Connection para el propio
+    // WebKit, X-Accel-Buffering para cuando hay un proxy tipo nginx en el
+    // medio) — sin esto el EventSource nunca termina de "abrir" del lado del
+    // cliente aunque el backend ya haya registrado todo bien.
+    private ResponseEntity<SseEmitter> sseResponse(SseEmitter emitter) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .header(HttpHeaders.CONNECTION, "keep-alive")
+                .header("X-Accel-Buffering", "no")
+                .body(emitter);
+    }
+
     @GetMapping(path = "/{roomCode}/stream/{playerId}", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamUpdates(@PathVariable String roomCode, @PathVariable UUID playerId,
+    public ResponseEntity<SseEmitter> streamUpdates(@PathVariable String roomCode, @PathVariable UUID playerId,
             HttpServletRequest httpRequest) {
         // OJO: este método produce text/event-stream, y EventSource manda
         // Accept: text/event-stream puro (sin comodín ningún tipo JSON). Si
@@ -197,7 +210,7 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
                 throw new ResourceNotFoundException();
             }
         } catch (UnauthorizedException | ResourceNotFoundException ex) {
-            return sseService.subscribeWithImmediateError(ex);
+            return sseResponse(sseService.subscribeWithImmediateError(ex));
         }
 
         RoomService.ReconnectResult reconnectResult = roomService.handleReconnect(roomCode, playerId);
@@ -209,12 +222,12 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
             sseService.broadcastToRoom(roomCode, "GAME_STATE", reconnectResult.state());
         }
 
-        return sseService.subscribe(roomCode, playerId, reconnectResult.state(), () -> {
+        return sseResponse(sseService.subscribe(roomCode, playerId, reconnectResult.state(), () -> {
             RoomStateResponse updated = roomService.handleDisconnect(roomCode, playerId);
             if (updated != null) {
                 sseService.broadcastToRoom(roomCode, "GAME_STATE", updated);
             }
-        });
+        }));
     }
 
     /**
@@ -226,7 +239,7 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
      * requireOwnership: no hay ninguna acción de escritura que proteger.
      */
 @GetMapping(path = "/{roomCode}/spectate", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
-public SseEmitter spectate(@PathVariable String roomCode, HttpServletRequest httpRequest) {
+public ResponseEntity<SseEmitter> spectate(@PathVariable String roomCode, HttpServletRequest httpRequest) {
     try {
         if (!rateLimiterService.allow("spectate:" + clientKey(httpRequest), 20, 10 * 60 * 1000L)) {
             throw new RateLimitExceededException();
@@ -240,18 +253,20 @@ public SseEmitter spectate(@PathVariable String roomCode, HttpServletRequest htt
                 playerRepository.findByRoomId(room.getId()),
                 gridPhotoRepository.findByRoomId(room.getId()));
 
-        return sseService.subscribe(roomCode, UUID.randomUUID(), snapshot, () -> {});
+        return sseResponse(sseService.subscribe(roomCode, UUID.randomUUID(), snapshot, () -> {}));
     } catch (ResourceNotFoundException | RateLimitExceededException ex) {
-        return sseService.subscribeWithImmediateError(ex);
+        return sseResponse(sseService.subscribeWithImmediateError(ex));
     }
 }
 
     @PostMapping("/{roomCode}/start")
     public ResponseEntity<RoomStateResponse> startGame(@PathVariable String roomCode,
-            @RequestParam UUID playerId, HttpServletRequest httpRequest) {
+            @RequestParam UUID playerId,
+            @RequestParam(required = false) Integer timeLimitMinutes,
+            HttpServletRequest httpRequest) {
         requireOwnership(httpRequest, playerId);
 
-        Room room = roomService.startGame(roomCode, playerId);
+        Room room = roomService.startGame(roomCode, playerId, timeLimitMinutes);
         RoomStateResponse response = RoomStateResponse.fromEntity(
                 room,
                 playerRepository.findByRoomId(room.getId()),

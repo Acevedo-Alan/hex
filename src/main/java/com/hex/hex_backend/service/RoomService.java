@@ -63,8 +63,21 @@ public class RoomService {
         throw new RoomCollisionException();
     }
 
+    // Mismos límites que HostSettingsModal.tsx en el frontend
+    // (DEFAULT/MAX_TIME_LIMIT_MINUTES) — si se tocan acá, hay que tocarlos ahí
+    // también. null (cliente viejo, o llamada directa a la API sin el param)
+    // cae al default; cualquier otra cosa se acota al rango [1, MAX] en vez
+    // de confiar ciegamente en lo que mande el cliente.
+    private static final int DEFAULT_TIME_LIMIT_MINUTES = 5;
+    private static final int MAX_TIME_LIMIT_MINUTES = 45;
+
+    private int resolveTimeLimitMinutes(Integer requested) {
+        if (requested == null) return DEFAULT_TIME_LIMIT_MINUTES;
+        return Math.max(1, Math.min(MAX_TIME_LIMIT_MINUTES, requested));
+    }
+
 @Transactional
-    public Room startGame(String roomCode, UUID requestingPlayerId) {
+    public Room startGame(String roomCode, UUID requestingPlayerId, Integer timeLimitMinutes) {
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(ResourceNotFoundException::new);
         
@@ -77,7 +90,17 @@ public class RoomService {
         }
 
         java.util.List<Player> players = playerRepository.findByRoomId(room.getId());
-        boolean allReady = !players.isEmpty() && players.stream().allMatch(Player::isReady);
+        // El Host no tiene botón de "listo" en el frontend (ver WaitingRoom
+        // en App.tsx: solo los invitados marcan ready) — exigirle isReady()
+        // acá también dejaba al Host solo en la sala con un IllegalStateException
+        // sin manejador dedicado en GlobalExceptionHandler (cae al catch-all
+        // de Exception -> 500) cada vez que intentaba arrancar en modo solo,
+        // porque su propio Player.ready nunca pasa a true. Solo los
+        // invitados (todos menos el Host) tienen que estar ready.
+        java.util.List<Player> guests = players.stream()
+                .filter(p -> !p.getId().equals(room.getHostPlayerId()))
+                .toList();
+        boolean allReady = !players.isEmpty() && guests.stream().allMatch(Player::isReady);
         if (!allReady) {
             throw new IllegalStateException("Todos los jugadores deben estar listos para iniciar.");
         }
@@ -89,10 +112,13 @@ public class RoomService {
             // bien y sacarle la misma foto 9 veces. Con un color distinto
             // por foto, cada casillero obliga a salir a buscar de nuevo.
             room.setTargetHexes(generateTargetPalette(9));
-            // 150s en vez de 90: encontrar un objeto nuevo para cada uno de
-            // los 9 colores es bastante más lento que reencuadrar el mismo
-            // objeto 9 veces — el tiempo total tiene que acompañar.
-            room.setEndsAt(Instant.now().plusSeconds(150));
+            // Elegido por el Host en AJUSTES.EXE (botones aditivos +5/+30/+1H,
+            // tope 45 min) — ver resolveTimeLimitMinutes más arriba. Encontrar
+            // un objeto nuevo para cada uno de los 9 colores es bastante más
+            // lento que reencuadrar el mismo objeto 9 veces, por eso el
+            // default (5 min) ya es más largo que un timer de un solo target.
+            int minutes = resolveTimeLimitMinutes(timeLimitMinutes);
+            room.setEndsAt(Instant.now().plusSeconds(minutes * 60L));
             
             return roomRepository.save(room);
         } catch (ObjectOptimisticLockingFailureException e) {

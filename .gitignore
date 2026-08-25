@@ -45,3 +45,13 @@ C:\Users\alan\Desktop\proyectos\Hex\hex-backend\src\main\resources\application.y
 
 C:\Users\alan\Desktop\proyectos\Hex\hex-backend\src\main\resources\application.yml
 src/main/resources/application.yml
+
+#markdowns
+TODO.md
+API_DOCS.md
+ARCHITECTURE.md
+CONTRIBUTING.md
+handover.md
+SKILL-backend.md
+.gitignore
+hexa-backend-conventions

@@ -75,6 +75,16 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", ex.getMessage()));
     }
 
+    // RoomService la usa para validaciones de negocio (no-host intentando
+    // iniciar/reiniciar, jugadores no listos) — sin este handler dedicado
+    // caían en handleGeneric() y el cliente veía un 500 para lo que en
+    // realidad es un 400 (input/estado inválido, no una falla del server).
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> handleIllegalState(IllegalStateException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleGeneric(Exception ex) {
         log.error("Error no controlado", ex);
