@@ -12,6 +12,7 @@ import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
 import com.hex.hex_backend.exception.RoomCollisionException;
+import com.hex.hex_backend.exception.RoomExpiredException;
 import com.hex.hex_backend.exception.RoomFullException;
 import com.hex.hex_backend.exception.UnauthorizedException;
 
@@ -67,6 +68,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleNotFound(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Recurso no encontrado. Verifique el PIN de la sala."));
+    }
+
+    @ExceptionHandler(RoomExpiredException.class)
+    public ResponseEntity<?> handleRoomExpired(RoomExpiredException ex) {
+        return ResponseEntity.status(HttpStatus.GONE)
+                .body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

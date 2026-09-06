@@ -12,6 +12,7 @@ import com.hex.hex_backend.domain.enums.RoomStatus;
 import com.hex.hex_backend.exception.InvalidRoomStateException;
 import com.hex.hex_backend.exception.RateLimitExceededException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
+import com.hex.hex_backend.exception.RoomExpiredException;
 import com.hex.hex_backend.exception.RoomFullException;
 import com.hex.hex_backend.exception.UnauthorizedException;
 import com.hex.hex_backend.repository.GridPhotoRepository;
@@ -197,6 +198,7 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
         // Por eso acá abajo capturamos todo lo que antes tiraba
         // orElseThrow/requireOwnership y lo mandamos como un evento SSE de
         // error real, dentro del mismo content-type que el cliente pidió.
+        RoomService.ReconnectResult reconnectResult;
         try {
             requireOwnership(httpRequest, playerId);
 
@@ -209,11 +211,15 @@ ResponseCookie cookie = ResponseCookie.from(SessionTokenService.COOKIE_NAME, ses
             if (!roomCode.equals(player.getRoom().getRoomCode())) {
                 throw new ResourceNotFoundException();
             }
-        } catch (UnauthorizedException | ResourceNotFoundException ex) {
+
+            // handleReconnect tira RoomExpiredException si la sala ya está
+            // COMPLETED o pasó su TTL — tiene que quedar dentro de este
+            // mismo try para caer en subscribeWithImmediateError() en vez
+            // de reventar como 500 (ver comentario de arriba).
+            reconnectResult = roomService.handleReconnect(roomCode, playerId);
+        } catch (UnauthorizedException | ResourceNotFoundException | RoomExpiredException ex) {
             return sseResponse(sseService.subscribeWithImmediateError(ex));
         }
-
-        RoomService.ReconnectResult reconnectResult = roomService.handleReconnect(roomCode, playerId);
 
         // Si el jugador estaba marcado como desconectado (se cortó a mitad de
         // partida), avisamos al resto de la sala apenas vuelve — su propio

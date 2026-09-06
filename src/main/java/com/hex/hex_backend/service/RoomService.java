@@ -12,6 +12,7 @@ import com.hex.hex_backend.exception.PhotoUploadFailedException;
 import com.hex.hex_backend.exception.ResourceNotFoundException;
 import com.hex.hex_backend.exception.RoomAlreadyStartedException;
 import com.hex.hex_backend.exception.RoomCollisionException;
+import com.hex.hex_backend.exception.RoomExpiredException;
 import com.hex.hex_backend.repository.GridPhotoRepository;
 import com.hex.hex_backend.repository.PlayerRepository;
 import com.hex.hex_backend.repository.RoomRepository;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -230,6 +232,18 @@ public class RoomService {
                 gridPhotoRepository.findByRoomId(room.getId()));
     }
 
+    // Mismo TTL que RoomCleanupService.cleanupOldRooms (createdAt, no
+    // completedAt: la sala no guarda cuándo terminó la partida). Una sala
+    // COMPLETED sigue viva en la base hasta esa limpieza horaria, así que
+    // sin este chequeo un rejoin tardío la traía igual con su podio final
+    // en vez de avisar que ya expiró.
+    private static final long ROOM_TTL_HOURS = 3;
+
+    private boolean isExpired(Room room) {
+        return room.getStatus() == RoomStatus.COMPLETED
+                || room.getCreatedAt().isBefore(LocalDateTime.now().minusHours(ROOM_TTL_HOURS));
+    }
+
     /**
      * Se llama cada vez que se abre (o reabre) el stream SSE de un jugador.
      * Si venía marcado como desconectado (se cortó a mitad de partida y
@@ -242,6 +256,10 @@ public class RoomService {
                 .orElseThrow(ResourceNotFoundException::new);
         Player player = playerRepository.findById(playerId)
                 .orElseThrow(ResourceNotFoundException::new);
+
+        if (isExpired(room)) {
+            throw new RoomExpiredException();
+        }
 
         boolean wasReconnect = !player.isConnected();
         if (wasReconnect) {
